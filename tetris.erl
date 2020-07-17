@@ -5,7 +5,8 @@
 -define(WIDTH, 10).
 -define(HEIGHT, 15).
 -define(TETROBLOCK, $B).
--define(DESCENDPERIOD, 1000).
+-define(DESCENDPERIOD, 250).
+-define(TETROSTARTPOS, {4,1}).
 
 %=============================================================================
 %                                 START
@@ -33,7 +34,7 @@ descendMoveGenerator(MoveQueuePID) ->
     timer:send_after(?DESCENDPERIOD, tick),
     receive
         tick ->
-            MoveQueuePID ! {move, {0,-1}},
+            MoveQueuePID ! {move, {0,1}},
             descendMoveGenerator(MoveQueuePID)
     end.
 
@@ -77,11 +78,17 @@ addMoves({X1, Y1}, {X2, Y2}) ->
 %
 % Generates a random tetromino.
 %
-randTetromino() ->
+genTetromino(Board) ->
     Tetrominoes = [i,j,l,o,s,t,z],
     RandIndex = 1,
     RandRotation = rand:uniform(4),
-    {lists:nth(RandIndex, Tetrominoes), RandRotation, [4,0]}.
+    Tetromino = lists:nth(RandIndex, Tetrominoes),
+    case validTetrominoPos(tetrominoes:fetchTetromino(Tetromino, RandRotation), Board, ?TETROSTARTPOS) of
+        true ->
+            {lists:nth(RandIndex, Tetrominoes), RandRotation, ?TETROSTARTPOS};
+        false ->
+            gameOver
+    end.
 
 %=============================================================================
 %                          LOOK UP BOARD POS
@@ -97,7 +104,7 @@ lookUpBoardPos(X, Y, Board) ->
         Y > ?HEIGHT ->
             ?TETROBLOCK;
         true ->
-            list:nth(X, list:nth(Y, Board))
+            lists:nth(X, lists:nth(Y, Board))
     end.
 
 %=============================================================================
@@ -110,12 +117,12 @@ lookUpBoardPos(X, Y, Board) ->
 validTetrominoPos([], _, _) ->
     true;
 
-validTetrominoPos([[TetX, TetY] | TetTail], Board, [PosX, PosY]) ->
+validTetrominoPos([[TetX, TetY] | TetTail], Board, {PosX, PosY}) ->
     case lookUpBoardPos(PosX + TetX, PosY + TetY, Board) of
         ?TETROBLOCK ->
             false;
         160 ->
-            validTetrominoPos(TetTail, Board, [PosX, PosY])
+            validTetrominoPos(TetTail, Board, {PosX, PosY})
     end.
 
 %=============================================================================
@@ -144,16 +151,16 @@ applyFuncToRow([BoardCell | BoardTail], Func, [TetX | TetTail], PrintX) ->
             [Func(boardCell, BoardCell)] ++ applyFuncToRow(BoardTail, Func, [TetX | TetTail], PrintX + 1)
     end.
 
-applyFuncToBoard(Board, Func, {Tetromino, [PosX, PosY]}) ->
+applyFuncToBoard(Board, Func, {Tetromino, {PosX, PosY}}) ->
     YCoord = 1,
-    applyFuncToBoard(Board, Func, {Tetromino, [PosX, PosY]}, YCoord).
+    applyFuncToBoard(Board, Func, {Tetromino, {PosX, PosY}}, YCoord).
 
 applyFuncToBoard([], _, _, _) ->
     [];
 
-applyFuncToBoard([BoardRow|BoardTail], Func, {Tetromino, [PosX, PosY]}, YCoord) ->
+applyFuncToBoard([BoardRow|BoardTail], Func, {Tetromino, {PosX, PosY}}, YCoord) ->
     [applyFuncToRow(BoardRow, Func, [PosX + TetX || [TetX, TetY] <- Tetromino, PosY + TetY == YCoord])] 
-        ++ applyFuncToBoard(BoardTail, Func, {Tetromino, [PosX, PosY]}, YCoord + 1).
+        ++ applyFuncToBoard(BoardTail, Func, {Tetromino, {PosX, PosY}}, YCoord + 1).
 
 %=============================================================================
 %                              PRINT FUNCTION
@@ -173,6 +180,21 @@ printFunction(tetroCell, TetroBlock) ->
     io:fwrite("~s", [[TetroBlock]]).
 
 %=============================================================================
+%                       WRITE TETROMINO TO BOARD
+%=============================================================================
+%
+% 
+%
+writeTetrominoToBoard(restOfBoardRow, BoardRow) ->
+    BoardRow;
+
+writeTetrominoToBoard(boardCell, BoardCell) ->
+    BoardCell;
+
+writeTetrominoToBoard(tetroCell, TetroBlock) ->
+    TetroBlock.
+
+%=============================================================================
 %                          UPDATE GAME STATE
 %=============================================================================
 %
@@ -181,17 +203,18 @@ printFunction(tetroCell, TetroBlock) ->
 updateGameState(Board, {_, Pos}, {0,0}) ->
     {tetrominoDescending, Board, Pos};
 
-updateGameState(Board, {Tetromino, [PosX, PosY]}, {MoveX, MoveY}) ->
-    NewPos = [PosX + MoveX, PosY + MoveY],
+updateGameState(Board, {Tetromino, {PosX, PosY}}, {MoveX, MoveY}) ->
+    NewPos = {PosX + MoveX, PosY + MoveY},
     case validTetrominoPos(Tetromino, Board, NewPos) of
         true ->
             {tetrominoDescending, Board, NewPos};
         false ->
             if 
-                PosY == -1 ->
-                    {tetrominoLanded, Board, [PosX, PosY]};
+                MoveY == 1 ->
+                    {tetrominoLanded, applyFuncToBoard(Board, fun writeTetrominoToBoard/2, {Tetromino, {PosX, PosY}}), 
+                        {PosX, PosY}};
                 true ->
-                    {tetrominoDescending, Board, [PosX, PosY]}
+                    {tetrominoDescending, Board, {PosX, PosY}}
             end
     end.
 
@@ -201,19 +224,24 @@ updateGameState(Board, {Tetromino, [PosX, PosY]}, {MoveX, MoveY}) ->
 %
 % 
 %
-
 gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQueuePID) ->
     %fetch moves bro
     MoveQueuePID ! {getMove, self()},
     receive
         {sendMove, Move} ->
-            {GameState, UpdatedBoard, UpdatedTetPos} = updateGameState(Board, {tetrominoes:fetchTetromino(Tetromino, Rotation), Pos}, Move)
+            {GameState, UpdatedBoard, UpdatedTetPos} = updateGameState(Board, {tetrominoes:fetchTetromino(Tetromino, Rotation), Pos}, Move),
+            BoardPID ! {sendBoard, UpdatedBoard, {Tetromino, Rotation, UpdatedTetPos}},
+            gameLoop(GameState, UpdatedBoard, {Tetromino, Rotation, UpdatedTetPos}, BoardPID, MoveQueuePID)
     end;
 
 gameLoop(tetrominoLanded, Board, _, BoardPID, MoveQueuePID) ->
-    {Tetromino, Rotation, Pos} = randTetromino(),
-    BoardPID ! {sendBoard, Board, {Tetromino, Rotation, Pos}},
-    gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQueuePID).
+    case genTetromino(Board) of
+        gameOver ->
+            io:format("GAME OVER :( ~n",[]);
+        {Tetromino, Rotation, Pos} ->
+            BoardPID ! {sendBoard, Board, {Tetromino, Rotation, Pos}},
+            gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQueuePID)
+    end.
 
 %=============================================================================
 %                               BOARD
@@ -237,13 +265,14 @@ board(Board, TetrominoInfo) ->
 % 
 %
 output(BoardPID) ->
-    timer:send_after(17, tick),
+    timer:send_after(?DESCENDPERIOD, display),
     receive
-        tick ->
+        display ->
             BoardPID ! {getBoard, self()},
             receive
                 {sendBoard, Board, {Tetromino, Rotation, Pos}} ->
                     _ = applyFuncToBoard(Board, fun printFunction/2, {tetrominoes:fetchTetromino(Tetromino, Rotation), Pos}),
+                    io:fwrite("~s~n", [[$-,$-,$-,$-,$-,$-,$-,$-,$-,$-,$-,$-]]),
                     output(BoardPID)
             end
     end.
