@@ -16,7 +16,7 @@
 %
 start() ->
     Board = lists:duplicate(?HEIGHT,[160,160,160,160,160,160,160,160,160,160]),
-    MoveQueuePID            = spawn(?MODULE, moveQueue, [{0,0}]),
+    MoveQueuePID         = spawn(?MODULE, moveQueue, [{0,0,0}]),
     DescendMoveGenerator = spawn(?MODULE, descendMoveGenerator, [MoveQueuePID]),
     BoardPID             = spawn(?MODULE, board, [Board, placeholder]),
     GameLoop             = spawn(?MODULE, gameLoop, [tetrominoLanded, Board, placeholder, BoardPID, MoveQueuePID]),
@@ -34,7 +34,7 @@ descendMoveGenerator(MoveQueuePID) ->
     timer:send_after(?DESCENDPERIOD, tick),
     receive
         tick ->
-            MoveQueuePID ! {move, {0,1}},
+            MoveQueuePID ! {move, {0, 1, 0}},
             descendMoveGenerator(MoveQueuePID)
     end.
 
@@ -44,14 +44,15 @@ descendMoveGenerator(MoveQueuePID) ->
 %
 % Stores all the moves either sent by the AI or the descend move generator.
 % Ready to send the accumulated moves to the core game loop when requested.
+% {move in x dir, move in y dir, num of times to rotate 90 deg clockwise}
 %
-moveQueue({0, 0}) ->
+moveQueue({0, 0, 0}) ->
     receive
         {move, MoveVec} ->
             moveQueue(MoveVec);
         {getMove, ReturnPID} ->
-            ReturnPID ! {sendMove, {0, 0}},
-            moveQueue({0, 0})
+            ReturnPID ! {sendMove, {0, 0, 0}},
+            moveQueue({0, 0, 0})
     end;
 
 moveQueue(AccMove) ->
@@ -60,7 +61,7 @@ moveQueue(AccMove) ->
             moveQueue(addMoves(AccMove, MoveVec));
         {getMove, ReturnPID} ->
             ReturnPID ! {sendMove, AccMove},
-            moveQueue({0, 0})
+            moveQueue({0, 0, 0})
     end.
 
 %=============================================================================
@@ -69,8 +70,8 @@ moveQueue(AccMove) ->
 %
 % Simple function to add together two moves.
 %
-addMoves({X1, Y1}, {X2, Y2}) ->
-    {X1 + X2, Y1 + Y2}.
+addMoves({X1, Y1, R1}, {X2, Y2, R2}) ->
+    {X1 + X2, Y1 + Y2, R1 + R2}.
 
 %=============================================================================
 %                       GEN RANDOM TETROMINO
@@ -211,12 +212,25 @@ updateGameState(Board, {Tetromino, {PosX, PosY}}, {MoveX, MoveY}) ->
         false ->
             if 
                 MoveY == 1 ->
-                    {tetrominoLanded, applyFuncToBoard(Board, fun writeTetrominoToBoard/2, {Tetromino, {PosX, PosY}}), 
-                        {PosX, PosY}};
+                    {tetrominoLanded, 
+                     applyFuncToBoard(Board, fun writeTetrominoToBoard/2, {Tetromino, {PosX, PosY}}), 
+                     {PosX, PosY}};
                 true ->
                     {tetrominoDescending, Board, {PosX, PosY}}
             end
     end.
+
+%=============================================================================
+%                           GET ROTATE VALUE
+%=============================================================================
+%
+% Calculate new rotation value using existin rotation value and the rotation from
+% the move.
+%
+getNewRotation(Rotation, 0) ->
+    Rotation;
+getNewRotation(_, NewRotation) ->
+    NewRotation.
 
 %=============================================================================
 %                              GAME LOOP
@@ -228,10 +242,13 @@ gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQ
     %fetch moves bro
     MoveQueuePID ! {getMove, self()},
     receive
-        {sendMove, Move} ->
-            {GameState, UpdatedBoard, UpdatedTetPos} = updateGameState(Board, {tetrominoes:fetchTetromino(Tetromino, Rotation), Pos}, Move),
-            BoardPID ! {sendBoard, UpdatedBoard, {Tetromino, Rotation, UpdatedTetPos}},
-            gameLoop(GameState, UpdatedBoard, {Tetromino, Rotation, UpdatedTetPos}, BoardPID, MoveQueuePID)
+        {sendMove, {MoveX, MoveY, MoveRotate}} ->
+            NewRotation = getNewRotation(Rotation, MoveRotate),
+            {GameState, UpdatedBoard, UpdatedTetPos} = updateGameState(Board, 
+                                                                       {tetrominoes:fetchTetromino(Tetromino, NewRotation), Pos},
+                                                                       {MoveX, MoveY}),
+            BoardPID ! {sendBoard, UpdatedBoard, {Tetromino, NewRotation, UpdatedTetPos}},
+            gameLoop(GameState, UpdatedBoard, {Tetromino, NewRotation, UpdatedTetPos}, BoardPID, MoveQueuePID)
     end;
 
 gameLoop(tetrominoLanded, Board, _, BoardPID, MoveQueuePID) ->
@@ -272,7 +289,7 @@ output(BoardPID) ->
             receive
                 {sendBoard, Board, {Tetromino, Rotation, Pos}} ->
                     _ = applyFuncToBoard(Board, fun printFunction/2, {tetrominoes:fetchTetromino(Tetromino, Rotation), Pos}),
-                    io:fwrite("~s~n", [[$-,$-,$-,$-,$-,$-,$-,$-,$-,$-,$-,$-]]),
+                    io:fwrite("~s~n", [[$-,$-,$-,$-,$-,$-,$-,$-,$-,$-,$|]]),
                     output(BoardPID)
             end
     end.
