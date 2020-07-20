@@ -1,5 +1,5 @@
 -module(tetrominoes).
--export([fetchTetromino/2]).
+-export([fetchTetromino/2, fetchTetrominoPos/2]).
 
 -define(WIDTH, 10).
 -define(HEIGHT, 15).
@@ -13,6 +13,16 @@ fetchTetromino(i,3) ->
 fetchTetromino(i,4) ->
     [[1,0],[1,1],[1,2],[1,3]].
 
+fetchTetrominoPos(i,1) ->
+    [{1, ?HEIGHT-1}, {2, ?HEIGHT-1}, {3, ?HEIGHT-1}, {4, ?HEIGHT-1}, 
+     {5, ?HEIGHT-1}, {6, ?HEIGHT-1}, {7, ?HEIGHT-1}];
+fetchTetrominoPos(i,2) ->
+    [{1, ?HEIGHT-1}, {2, ?HEIGHT-1}, {3, ?HEIGHT-1}, {4, ?HEIGHT-1}, {5, ?HEIGHT-1},
+     {6, ?HEIGHT-1}, {7, ?HEIGHT-1}, {8, ?HEIGHT-1}, {9, ?HEIGHT-1}, {10, ?HEIGHT-1}];
+fetchTetrominoPos(i,3) ->
+    fetchTetrominoPos(i,1);
+fetchTetrominoPos(i,4) ->
+    fetchTetrominoPos(i,2).
 
 
 %fetchTetromino(l,1) ->

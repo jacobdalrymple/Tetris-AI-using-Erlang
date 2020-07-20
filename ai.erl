@@ -1,11 +1,15 @@
 -module(ai).
--import(tetrominoes,[fetchTetromino/2]).
+-import(tetrominoes,[fetchTetromino/2, fetchTetrominoPos/2]).
 
 %defines how long the ai will wait after submitting move to retrieve new game state.
 -define(AIWAIT, 50).
 
-genValidMoves(Board, TetrominoInfo) ->
-    
+evaluateMoves(Board, Tetrominoe, MoveList) ->
+
+
+genValidMoves(Board, {Tetromino, Rotation, Pos}) ->
+    MoveList = tetrominoes:fetchTetrominoPos(Tetromino, Rotation),
+    MoveScores = evaluateMoves(Board, tetrominoes:fetchTetromino(Tetromino, Rotation), MoveList),
 
 calculateBestMove(Board, TetrominoInfo) ->
     ValidMoves = genValidMoves(Board, TetrominoInfo),
