@@ -1,5 +1,5 @@
 -module(tetrominoes).
--export([fetchTetromino/2, fetchTetrominoXPos/2]).
+-export([fetchTetromino/2, potentialXPos/2, numOfUniqueRotations/1]).
 
 -define(WIDTH, 10).
 -define(HEIGHT, 15).
@@ -13,14 +13,13 @@ fetchTetromino(i,3) ->
 fetchTetromino(i,4) ->
     [[1,0],[1,1],[1,2],[1,3]].
 
-fetchTetrominoXPos(i,1) ->
+potentialXPos(i,1) ->
     [1, 2, 3, 4, 5, 6, 7];
-fetchTetrominoXPos(i,2) ->
-    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-fetchTetrominoXPos(i,3) ->
-    fetchTetrominoXPos(i,1);
-fetchTetrominoXPos(i,4) ->
-    fetchTetrominoXPos(i,2).
+potentialXPos(i,2) ->
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
+
+numOfUniqueRotations(i) ->
+    2.
 
 %fetchTetrominoPos(i,1) ->
 %    [{1, ?HEIGHT-1}, {2, ?HEIGHT-1}, {3, ?HEIGHT-1}, {4, ?HEIGHT-1}, 

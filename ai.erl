@@ -1,5 +1,5 @@
 -module(ai).
--import(tetrominoes,[fetchTetromino/2, fetchTetrominoPos/2]).
+-import(tetrominoes,[fetchTetromino/2, potentialXPos/2, numOfUniqueRotations/1]).
 -import(tetris, [validTetrominoePos/3]).
 
 -export([aiCoreLoop/2]).
@@ -8,7 +8,22 @@
 -define(AIWAIT, 50).
 
 %evaluateMoves(Board, Tetrominoe, MoveList) ->
+
+fetchValidMoves(Board, {Tetromino, Rotation, Pos}) ->
+    fetchValidMoves(Board, {Tetromino, Rotation, Pos}, tetrominoes:numOfUniqueRotations(Tetromino)).
+
+fetchValidMoves(_, _, 0) ->
+    [];
     
+fetchValidMoves(Board, {Tetromino, Rotation, Pos}, PotentialRotation) ->
+    Moves = genValidMoves(Board,
+                            tetrominoes:fetchTetromino(Tetromino, PotentialRotation),
+                            Pos,
+                            tetrominoes:potentialXPos(Tetromino, PotentialRotation)),
+    [{X, Y , PotentialRotation} || {X, Y} <- Moves]
+        ++ fetchValidMoves(Board, {Tetromino, Rotation, Pos}, PotentialRotation - 1).
+
+
 
 genValidMoves(Board, Tetromino, CurrPos, PotentialXPos) ->
     genValidMoves(Board, Tetromino, CurrPos, PotentialXPos, 1, []).
@@ -16,26 +31,27 @@ genValidMoves(Board, Tetromino, CurrPos, PotentialXPos) ->
 genValidMoves(_, _, _, [], _, _) ->
     [];
 
-genValidMoves(Board, Tetromino, {CurrPosX, CurrPosY}, [PotentialXPos | PotentialXPosTail], PotentialYPos, CurrMoveList) ->
+genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, [PotentialXPos | PotentialXPosTail], PotentialYPos, CurrMoveList) ->
     case tetris:validTetrominoPos(Tetromino, Board, {PotentialXPos, PotentialYPos}) of
         true ->
-            genValidMoves(Board, Tetromino, {CurrPosX, CurrPosY}, [PotentialXPos | PotentialXPosTail], PotentialYPos + 1, CurrMoveList);
+            genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, [PotentialXPos | PotentialXPosTail], PotentialYPos + 1, CurrMoveList);
         false ->
             if 
                 PotentialYPos == 1 ->
-                    genValidMoves(Board, Tetromino, {CurrPosX, CurrPosY}, PotentialXPosTail, 1, CurrMoveList);
+                    genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, PotentialXPosTail, 1, CurrMoveList);
+                PotentialYPos < CurrYPos ->
+                    genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, PotentialXPosTail, 1, CurrMoveList);
                 true ->
-                    [{PotentialXPos - CurrPosX, PotentialYPos - 1 - CurrPosY, 0}] 
-                        ++ genValidMoves(Board, Tetromino, {CurrPosX, CurrPosY}, PotentialXPosTail, 1, CurrMoveList)
+                    [{PotentialXPos - CurrXPos, PotentialYPos - 1 - CurrYPos}] 
+                        ++ genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, PotentialXPosTail, 1, CurrMoveList)
             end
     end.
 
+
+
 %need to stop tetromino going higher!!
-calculateBestMove(Board, {Tetromino, Rotation, Pos}) ->
-    ValidMoves = genValidMoves(Board,
-                               tetrominoes:fetchTetromino(Tetromino, Rotation),
-                               Pos,
-                               tetrominoes:fetchTetrominoXPos(Tetromino, Rotation)),
+calculateBestMove(Board, TetrominoInfo) ->
+    ValidMoves = fetchValidMoves(Board, TetrominoInfo),
     RandMoveIndex = rand:uniform(length(ValidMoves)),
     lists:nth(RandMoveIndex, ValidMoves).
     
