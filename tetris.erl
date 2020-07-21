@@ -1,6 +1,7 @@
 -module(tetris).
 -import(tetrominoes,[fetchTetromino/2]).
--export([start/0, gameLoop/5, board/2, output/1, moveQueue/1, descendMoveGenerator/1, printFunction/2]).
+-import(ai, [aiCoreLoop/2]).
+-export([start/0, gameLoop/6, board/2, output/1, moveQueue/1, descendMoveGenerator/1, printFunction/2, validTetrominoPos/3]).
 
 -define(WIDTH, 10).
 -define(HEIGHT, 15).
@@ -19,8 +20,18 @@ start() ->
     MoveQueuePID         = spawn(?MODULE, moveQueue, [{0,0,0}]),
     DescendMoveGenerator = spawn(?MODULE, descendMoveGenerator, [MoveQueuePID]),
     BoardPID             = spawn(?MODULE, board, [Board, placeholder]),
-    GameLoop             = spawn(?MODULE, gameLoop, [tetrominoLanded, Board, placeholder, BoardPID, MoveQueuePID]),
-    Output               = spawn(?MODULE, output, [BoardPID]).
+    GameLoop             = spawn(?MODULE, gameLoop, [tetrominoLanded, Board, placeholder, BoardPID, MoveQueuePID, self()]),
+    AIPID                = spawn(ai,      aiCoreLoop, [BoardPID, MoveQueuePID]),
+    Output               = spawn(?MODULE, output, [BoardPID]),
+    receive
+        gameOver ->
+            exit(AIPID, kill),
+            exit(GameLoop, kill),
+            exit(DescendMoveGenerator, kill),
+            exit(Output, kill),
+            exit(BoardPID, kill),
+            exit(MoveQueuePID, kill)   
+    end.
 
 
 %=============================================================================
@@ -238,7 +249,7 @@ getNewRotation(_, NewRotation) ->
 %
 % 
 %
-gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQueuePID) ->
+gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQueuePID, KillPID) ->
     %fetch moves bro
     MoveQueuePID ! {getMove, self()},
     receive
@@ -248,16 +259,17 @@ gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQ
                                                                        {tetrominoes:fetchTetromino(Tetromino, NewRotation), Pos},
                                                                        {MoveX, MoveY}),
             BoardPID ! {sendBoard, UpdatedBoard, {Tetromino, NewRotation, UpdatedTetPos}},
-            gameLoop(GameState, UpdatedBoard, {Tetromino, NewRotation, UpdatedTetPos}, BoardPID, MoveQueuePID)
+            gameLoop(GameState, UpdatedBoard, {Tetromino, NewRotation, UpdatedTetPos}, BoardPID, MoveQueuePID, KillPID)
     end;
 
-gameLoop(tetrominoLanded, Board, _, BoardPID, MoveQueuePID) ->
+gameLoop(tetrominoLanded, Board, _, BoardPID, MoveQueuePID, KillPID) ->
     case genTetromino(Board) of
         gameOver ->
-            io:format("GAME OVER :( ~n",[]);
+            io:format("GAME OVER :( ~n",[]),
+            KillPID ! gameOver;
         {Tetromino, Rotation, Pos} ->
             BoardPID ! {sendBoard, Board, {Tetromino, Rotation, Pos}},
-            gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQueuePID)
+            gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, BoardPID, MoveQueuePID, KillPID)
     end.
 
 %=============================================================================
