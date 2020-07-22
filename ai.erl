@@ -1,26 +1,71 @@
 -module(ai).
--import(tetrominoes,[fetchTetromino/2, potentialXPos/2, numOfUniqueRotations/1]).
+-import(tetrominoes,[fetchTetromino/2, potentialXPos/2, numOfUniqueRotations/1, applyFuncToBoard/3, writeTetrominoToBoard/2]).
 -import(tetris, [validTetrominoePos/3]).
 
 -export([aiCoreLoop/2]).
 
 %defines how long the ai will wait after submitting move to retrieve new game state.
 -define(AIWAIT, 50).
+-define(TETROBLOCK, $B).
 
 %evaluateMoves(Board, Tetrominoe, MoveList) ->
+%updateRowTracker([], [], _) ->
+%    [];
+%updateRowTracker([?TETROBLOCK | BoardRowT], [clear | RowTrackerT], YPos) ->
+%    [occupied] ++ updateRowTracker(BoardRowT, RowTrackerT, YPos);
+%updateRowTracker([?TETROBLOCK | BoardRowT], [_ | RowTrackerT], YPos) ->
+%    [occupied] ++ updateRowTracker(BoardRowT, RowTrackerT, YPos);
+%updateRowTracker([160 | BoardRowT], [clear | RowTrackerT], YPos) ->
+%    [clear] ++ updateRowTracker(BoardRowT, RowTrackerT, YPos);
+%updateRowTracker([160 | BoardRowT], [_ | RowTrackerT], YPos) ->
+%    [hole] ++ updateRowTracker(BoardRowT, RowTrackerT, YPos).
+
+% ColInfo = {Height of cell's column, current contentes of cell}
+updateRowTracker([], [], _) ->
+    [];
+updateRowTracker([?TETROBLOCK | BoardRowT], [{0, empty} | ColInfoT], YPos) ->
+    [{YPos, block}] ++ updateRowTracker(BoardRowT, ColInfoT, YPos);
+updateRowTracker([?TETROBLOCK | BoardRowT], [{Height, _} | ColInfoT], YPos) ->
+    [{Height, block}] ++ updateRowTracker(BoardRowT, ColInfoT, YPos);
+
+
+updateRowTracker([160 | BoardRowT], [{0, empty} | ColInfoT], YPos) ->
+    [{0, empty}] ++ updateRowTracker(BoardRowT, ColInfoT, YPos);
+updateRowTracker([160 | BoardRowT], [{Height, _} | ColInfoT], YPos) ->
+    [{Height, empty}] ++ updateRowTracker(BoardRowT, ColInfoT, YPos).
+
+getBoardScore([BoardRow | BoardT]) ->
+    getBoardScore([BoardRow | BoardT], [{0, empty} || _ <- BoardRow], 1).
+
+
+getBoardScore([], RowTracker, _) ->
+    0.2 * lists:sum([H || {H, _} <- RowTracker]);
+getBoardScore([BoardRow | BoardTail], RowTracker, YPos) ->
+    UpdatedRowTracker = updateRowTracker(BoardRow, RowTracker, YPos),
+    length([H || {H, State} <- UpdatedRowTracker, State =:= empty, H =/= 0])
+        + getBoardScore(BoardTail, UpdatedRowTracker, YPos + 1).
+
+evalMove(Board, Tetromino, Rotation, {PosX, PosY}, {MoveX, MoveY}) ->
+    NewPos = {PosX + MoveX, PosY + MoveY},
+    getBoardScore(tetris:applyFuncToBoard(Board, 
+                                          fun tetris:writeTetrominoToBoard/2,
+                                          {tetrominoes:fetchTetromino(Tetromino, Rotation), 
+                                              NewPos})).
+
 
 fetchValidMoves(Board, {Tetromino, Rotation, Pos}) ->
     fetchValidMoves(Board, {Tetromino, Rotation, Pos}, tetrominoes:numOfUniqueRotations(Tetromino)).
 
 fetchValidMoves(_, _, 0) ->
     [];
-    
+
+%get rid of rotation variable
 fetchValidMoves(Board, {Tetromino, Rotation, Pos}, PotentialRotation) ->
     Moves = genValidMoves(Board,
                             tetrominoes:fetchTetromino(Tetromino, PotentialRotation),
                             Pos,
                             tetrominoes:potentialXPos(Tetromino, PotentialRotation)),
-    [{X, Y , PotentialRotation} || {X, Y} <- Moves]
+    [{evalMove(Board, Tetromino, PotentialRotation, Pos, {X,Y}), {X, Y , PotentialRotation}} || {X, Y} <- Moves]
         ++ fetchValidMoves(Board, {Tetromino, Rotation, Pos}, PotentialRotation - 1).
 
 
@@ -47,13 +92,24 @@ genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, [PotentialXPos | Potential
             end
     end.
 
+selectBestMove([{Score, Move} | MoveListT]) ->
+    selectBestMove([{Score, Move} | MoveListT], {10000000, Move}).
+
+selectBestMove([], {_, Move}) ->
+    Move;
+selectBestMove([{Score, Move} | MoveListT], {BestScore, BestMove}) ->
+    if
+        Score < BestScore ->
+            selectBestMove(MoveListT, {Score, Move});
+        true ->
+            selectBestMove(MoveListT, {BestScore, BestMove})
+    end.
 
 
 %need to stop tetromino going higher!!
 calculateBestMove(Board, TetrominoInfo) ->
-    ValidMoves = fetchValidMoves(Board, TetrominoInfo),
-    RandMoveIndex = rand:uniform(length(ValidMoves)),
-    lists:nth(RandMoveIndex, ValidMoves).
+    MoveList = fetchValidMoves(Board, TetrominoInfo),
+    selectBestMove(MoveList).
     
 
 aiCoreLoop(BoardPID, MoveQueuePID) ->

@@ -1,7 +1,7 @@
 -module(tetris).
 -import(tetrominoes,[fetchTetromino/2]).
 -import(ai, [aiCoreLoop/2]).
--export([start/0, gameLoop/6, board/2, output/1, moveQueue/1, descendMoveGenerator/1, printFunction/2, validTetrominoPos/3]).
+-export([start/0, gameLoop/6, board/2, output/1, moveQueue/1, descendMoveGenerator/1, printFunction/2, validTetrominoPos/3, applyFuncToBoard/3, writeTetrominoToBoard/2]).
 
 -define(WIDTH, 10).
 -define(HEIGHT, 15).
