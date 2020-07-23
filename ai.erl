@@ -39,7 +39,7 @@ getBoardScore([BoardRow | BoardT]) ->
 
 
 getBoardScore([], RowTracker, _) ->
-    0.2 * lists:sum([H || {H, _} <- RowTracker]);
+    lists:sum([1/(H*H) || {H, _} <- RowTracker, H =/= 0]);
 getBoardScore([BoardRow | BoardTail], RowTracker, YPos) ->
     UpdatedRowTracker = updateRowTracker(BoardRow, RowTracker, YPos),
     length([H || {H, State} <- UpdatedRowTracker, State =:= empty, H =/= 0])
@@ -71,6 +71,7 @@ fetchValidMoves(Board, {Tetromino, Rotation, Pos}, PotentialRotation) ->
 
 
 genValidMoves(Board, Tetromino, CurrPos, PotentialXPos) ->
+    io:format("POTENTIAL X POS : ~p~n", [PotentialXPos]),
     genValidMoves(Board, Tetromino, CurrPos, PotentialXPos, 1, []).
 
 genValidMoves(_, _, _, [], _, _) ->
@@ -93,23 +94,27 @@ genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, [PotentialXPos | Potential
     end.
 
 selectBestMove([{Score, Move} | MoveListT]) ->
-    selectBestMove([{Score, Move} | MoveListT], {10000000, Move}).
+    selectBestMove([{Score, Move} | MoveListT], [{10000000, Move}]).
 
-selectBestMove([], {_, Move}) ->
+selectBestMove([], BestMoveList) ->
+    {_, Move} = lists:nth( rand:uniform(length(BestMoveList)), BestMoveList),
     Move;
-selectBestMove([{Score, Move} | MoveListT], {BestScore, BestMove}) ->
+selectBestMove([{Score, Move} | MoveListT], [{BestScore, BestMove} | BestMoveListT]) ->
     if
         Score < BestScore ->
-            selectBestMove(MoveListT, {Score, Move});
+            selectBestMove(MoveListT, [{Score, Move}]);
         true ->
-            selectBestMove(MoveListT, {BestScore, BestMove})
+            selectBestMove(MoveListT, [{BestScore, BestMove} | BestMoveListT])
     end.
 
 
 %need to stop tetromino going higher!!
 calculateBestMove(Board, TetrominoInfo) ->
     MoveList = fetchValidMoves(Board, TetrominoInfo),
-    selectBestMove(MoveList).
+    %io:format("MOVE LIST : ~p~n", [MoveList]),
+    io:format("SENT MOVE : ~p~n", [selectBestMove(MoveList)]),
+    %selectBestMove(MoveList).
+    {0,0,0}.
     
 
 aiCoreLoop(BoardPID, MoveQueuePID) ->
