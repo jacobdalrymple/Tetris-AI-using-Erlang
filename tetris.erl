@@ -92,8 +92,8 @@ addMoves({X1, Y1, R1}, {X2, Y2, R2}) ->
 %
 genTetromino(Board) ->
     Tetrominoes = [i,j,l,o,s,t,z],
-    RandIndex = 1,
-    RandRotation = rand:uniform(4),
+    RandIndex = rand:uniform(length(Tetrominoes)),
+    RandRotation = rand:uniform(tetrominoes:numOfUniqueRotations(lists:nth(RandIndex, Tetrominoes))),
     Tetromino = lists:nth(RandIndex, Tetrominoes),
     case validTetrominoPos(tetrominoes:fetchTetromino(Tetromino, RandRotation), Board, ?TETROSTARTPOS) of
         true ->

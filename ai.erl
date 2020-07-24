@@ -8,18 +8,6 @@
 -define(AIWAIT, 250).
 -define(TETROBLOCK, $B).
 
-%evaluateMoves(Board, Tetrominoe, MoveList) ->
-%updateRowTracker([], [], _) ->
-%    [];
-%updateRowTracker([?TETROBLOCK | BoardRowT], [clear | RowTrackerT], YPos) ->
-%    [occupied] ++ updateRowTracker(BoardRowT, RowTrackerT, YPos);
-%updateRowTracker([?TETROBLOCK | BoardRowT], [_ | RowTrackerT], YPos) ->
-%    [occupied] ++ updateRowTracker(BoardRowT, RowTrackerT, YPos);
-%updateRowTracker([160 | BoardRowT], [clear | RowTrackerT], YPos) ->
-%    [clear] ++ updateRowTracker(BoardRowT, RowTrackerT, YPos);
-%updateRowTracker([160 | BoardRowT], [_ | RowTrackerT], YPos) ->
-%    [hole] ++ updateRowTracker(BoardRowT, RowTrackerT, YPos).
-
 % ColInfo = {Height of cell's column, current contentes of cell}
 updateRowTracker([], [], _) ->
     [];
