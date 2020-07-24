@@ -5,7 +5,7 @@
 -export([aiCoreLoop/2]).
 
 %defines how long the ai will wait after submitting move to retrieve new game state.
--define(AIWAIT, 50).
+-define(AIWAIT, 250).
 -define(TETROBLOCK, $B).
 
 %evaluateMoves(Board, Tetrominoe, MoveList) ->
@@ -34,20 +34,22 @@ updateRowTracker([160 | BoardRowT], [{0, empty} | ColInfoT], YPos) ->
 updateRowTracker([160 | BoardRowT], [{Height, _} | ColInfoT], YPos) ->
     [{Height, empty}] ++ updateRowTracker(BoardRowT, ColInfoT, YPos).
 
-getBoardScore([BoardRow | BoardT]) ->
-    getBoardScore([BoardRow | BoardT], [{0, empty} || _ <- BoardRow], 1).
+getBoardCost([BoardRow | BoardT]) ->
+    getBoardCost([BoardRow | BoardT], [{0, empty} || _ <- BoardRow], 1).
 
 
-getBoardScore([], RowTracker, _) ->
-    lists:sum([1/(H*H) || {H, _} <- RowTracker, H =/= 0]);
-getBoardScore([BoardRow | BoardTail], RowTracker, YPos) ->
+%here the heights are used in the cost function
+getBoardCost([], RowTracker, _) ->
+    lists:sum([1/math:pow(2, H)|| {H, _} <- RowTracker]);
+%here the "holes" are counted via the list comphresion
+getBoardCost([BoardRow | BoardTail], RowTracker, YPos) ->
     UpdatedRowTracker = updateRowTracker(BoardRow, RowTracker, YPos),
     length([H || {H, State} <- UpdatedRowTracker, State =:= empty, H =/= 0])
-        + getBoardScore(BoardTail, UpdatedRowTracker, YPos + 1).
+        + getBoardCost(BoardTail, UpdatedRowTracker, YPos + 1).
 
 evalMove(Board, Tetromino, Rotation, {PosX, PosY}, {MoveX, MoveY}) ->
     NewPos = {PosX + MoveX, PosY + MoveY},
-    getBoardScore(tetris:applyFuncToBoard(Board, 
+    getBoardCost(tetris:applyFuncToBoard(Board, 
                                           fun tetris:writeTetrominoToBoard/2,
                                           {tetrominoes:fetchTetromino(Tetromino, Rotation), 
                                               NewPos})).
@@ -71,7 +73,7 @@ fetchValidMoves(Board, {Tetromino, Rotation, Pos}, PotentialRotation) ->
 
 
 genValidMoves(Board, Tetromino, CurrPos, PotentialXPos) ->
-    io:format("POTENTIAL X POS : ~p~n", [PotentialXPos]),
+    %io:format("POTENTIAL X POS : ~p~n", [PotentialXPos]),
     genValidMoves(Board, Tetromino, CurrPos, PotentialXPos, 1, []).
 
 genValidMoves(_, _, _, [], _, _) ->
@@ -93,18 +95,18 @@ genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, [PotentialXPos | Potential
             end
     end.
 
-selectBestMove([{Score, Move} | MoveListT]) ->
-    selectBestMove([{Score, Move} | MoveListT], [{10000000, Move}]).
+selectBestMove([{Cost, Move} | MoveListT]) ->
+    selectBestMove([{Cost, Move} | MoveListT], [{10000000, Move}]).
 
 selectBestMove([], BestMoveList) ->
     {_, Move} = lists:nth( rand:uniform(length(BestMoveList)), BestMoveList),
     Move;
-selectBestMove([{Score, Move} | MoveListT], [{BestScore, BestMove} | BestMoveListT]) ->
+selectBestMove([{Cost, Move} | MoveListT], [{BestCost, BestMove} | BestMoveListT]) ->
     if
-        Score < BestScore ->
-            selectBestMove(MoveListT, [{Score, Move}]);
+        Cost < BestCost ->
+            selectBestMove(MoveListT, [{Cost, Move}]);
         true ->
-            selectBestMove(MoveListT, [{BestScore, BestMove} | BestMoveListT])
+            selectBestMove(MoveListT, [{BestCost, BestMove} | BestMoveListT])
     end.
 
 
@@ -112,9 +114,8 @@ selectBestMove([{Score, Move} | MoveListT], [{BestScore, BestMove} | BestMoveLis
 calculateBestMove(Board, TetrominoInfo) ->
     MoveList = fetchValidMoves(Board, TetrominoInfo),
     %io:format("MOVE LIST : ~p~n", [MoveList]),
-    io:format("SENT MOVE : ~p~n", [selectBestMove(MoveList)]),
-    %selectBestMove(MoveList).
-    {0,0,0}.
+    %io:format("SENT MOVE : ~p~n", [selectBestMove(MoveList)]),
+    selectBestMove(MoveList).
     
 
 aiCoreLoop(BoardPID, MoveQueuePID) ->
