@@ -144,24 +144,24 @@ validTetrominoPos([[TetX, TetY] | TetTail], Board, {PosX, PosY}) ->
 % These pair of functions apply a function accross the board and current tetromino
 % cells. For example printing the board or writing a tetromino to the board.
 %
-
-applyFuncToRow(BoardRow, Func, []) ->
-    Func(restOfBoardRow, BoardRow);
-
-applyFuncToRow(BoardRow, Func, TetrominoRowPos) ->
-    PrintX = 1,
-    applyFuncToRow(BoardRow, Func, TetrominoRowPos, PrintX).
-
-applyFuncToRow(BoardRow, Func, [], _) ->
-    applyFuncToRow(BoardRow, Func, []);
-
-applyFuncToRow([BoardCell | BoardTail], Func, [TetX | TetTail], PrintX) ->
-    if
-        TetX == PrintX ->
-            [Func(tetroCell, ?TETROBLOCK)] ++ applyFuncToRow(BoardTail, Func, TetTail, PrintX + 1);
-        true ->
-            [Func(boardCell, BoardCell)] ++ applyFuncToRow(BoardTail, Func, [TetX | TetTail], PrintX + 1)
-    end.
+%
+%applyFuncToRow(BoardRow, Func, []) ->
+%    Func(restOfBoardRow, BoardRow);
+%
+%applyFuncToRow(BoardRow, Func, TetrominoRowPos) ->
+%    PrintX = 1,
+%    applyFuncToRow(BoardRow, Func, TetrominoRowPos, PrintX).
+%
+%applyFuncToRow(BoardRow, Func, [], _) ->
+%    applyFuncToRow(BoardRow, Func, []);
+%
+%applyFuncToRow([BoardCell | BoardTail], Func, [TetX | TetTail], PrintX) ->
+%    if
+%        TetX == PrintX ->
+%            [Func(tetroCell, ?TETROBLOCK)] ++ applyFuncToRow(BoardTail, Func, TetTail, PrintX + 1);
+%        true ->
+%            [Func(boardCell, BoardCell)] ++ applyFuncToRow(BoardTail, Func, [TetX | TetTail], PrintX + 1)
+%    end.
 
 applyFuncToBoard(Board, Func, {Tetromino, {PosX, PosY}}) ->
     YCoord = 1,
@@ -171,7 +171,7 @@ applyFuncToBoard([], _, _, _) ->
     [];
 
 applyFuncToBoard([BoardRow|BoardTail], Func, {Tetromino, {PosX, PosY}}, YCoord) ->
-    [applyFuncToRow(BoardRow, Func, [PosX + TetX || [TetX, TetY] <- Tetromino, PosY + TetY == YCoord])] 
+    [Func(BoardRow, [PosX + TetX || [TetX, TetY] <- Tetromino, PosY + TetY == YCoord])] 
         ++ applyFuncToBoard(BoardTail, Func, {Tetromino, {PosX, PosY}}, YCoord + 1).
 
 %=============================================================================
@@ -181,15 +181,36 @@ applyFuncToBoard([BoardRow|BoardTail], Func, {Tetromino, {PosX, PosY}}, YCoord) 
 % Designed to be used with the applyFuncToBoard function, this function is used
 % to print the board to the console.
 %
-printFunction(restOfBoardRow, BoardRow) ->
+%printFunction(restOfBoardRow, BoardRow) ->
+%    io:fwrite("~s", [[BoardRow]]),
+%    io:fwrite("~s~n", [[$|]]);
+%
+%printFunction(boardCell, BoardCell) ->
+%    io:fwrite("~s", [[BoardCell]]);
+%
+%printFunction(tetroCell, TetroBlock) ->
+%    io:fwrite("~s", [[TetroBlock]]).
+%
+printFunction(BoardRow, [])->
     io:fwrite("~s", [[BoardRow]]),
     io:fwrite("~s~n", [[$|]]);
 
-printFunction(boardCell, BoardCell) ->
-    io:fwrite("~s", [[BoardCell]]);
+printFunction(BoardRow, TetrominoRowPos) ->
+    PrintX = 1,
+    printFunction(BoardRow, TetrominoRowPos, PrintX).
 
-printFunction(tetroCell, TetroBlock) ->
-    io:fwrite("~s", [[TetroBlock]]).
+printFunction(BoardRow, [], _) ->
+    printFunction(BoardRow, []);
+
+printFunction([BoardCell | BoardTail], [TetX | TetTail], PrintX) ->
+    if
+        TetX == PrintX ->
+            io:fwrite("~s", [[?TETROBLOCK]]),
+            printFunction(BoardTail, TetTail, PrintX + 1);
+        true ->
+            io:fwrite("~s", [[BoardCell]]),
+            printFunction(BoardTail, [TetX | TetTail], PrintX + 1)
+    end.
 
 %=============================================================================
 %                       WRITE TETROMINO TO BOARD
@@ -197,14 +218,31 @@ printFunction(tetroCell, TetroBlock) ->
 %
 % 
 %
-writeTetrominoToBoard(restOfBoardRow, BoardRow) ->
+%writeTetrominoToBoard(restOfBoardRow, BoardRow) ->
+%    BoardRow;
+%
+%writeTetrominoToBoard(boardCell, BoardCell) ->
+%    BoardCell;
+%
+%writeTetrominoToBoard(tetroCell, TetroBlock) ->
+%    TetroBlock.
+writeTetrominoToBoard(BoardRow, []) ->
     BoardRow;
+writeTetrominoToBoard(BoardRow, TetrominoRowPos) ->
+    PrintX = 1,
+    writeTetrominoToBoard(BoardRow, TetrominoRowPos, PrintX).
 
-writeTetrominoToBoard(boardCell, BoardCell) ->
-    BoardCell;
+writeTetrominoToBoard(BoardRow, [], _) ->
+    writeTetrominoToBoard(BoardRow, []);
 
-writeTetrominoToBoard(tetroCell, TetroBlock) ->
-    TetroBlock.
+writeTetrominoToBoard([BoardCell | BoardTail], [TetX | TetTail], PrintX) ->
+    if
+        TetX == PrintX ->
+            [?TETROBLOCK] ++ writeTetrominoToBoard(BoardTail, TetTail, PrintX + 1);
+        true ->
+            [BoardCell] ++ writeTetrominoToBoard(BoardTail, [TetX | TetTail], PrintX + 1)
+    end.
+
 
 %=============================================================================
 %                          UPDATE GAME STATE
@@ -291,7 +329,7 @@ board(Board, TetrominoInfo) ->
 %                               OUTPUT
 %=============================================================================
 %
-% 
+%
 %
 output(BoardPID) ->
     timer:send_after(?DESCENDPERIOD, display),
