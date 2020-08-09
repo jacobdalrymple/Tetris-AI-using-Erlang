@@ -37,10 +37,7 @@ getBoardCost([BoardRow | BoardTail], RowTracker, YPos) ->
 
 evalMove(Board, Tetromino, Rotation, {PosX, PosY}, {MoveX, MoveY}) ->
     NewPos = {PosX + MoveX, PosY + MoveY},
-    getBoardCost(tetris:applyFuncToBoard(Board, 
-                                          fun tetris:writeTetrominoToBoard/2,
-                                          {tetrominoes:fetchTetromino(Tetromino, Rotation), 
-                                              NewPos})).
+    getBoardCost(tetris:updateBoard(Board, {tetrominoes:fetchTetromino(Tetromino, Rotation), NewPos})).
 
 
 fetchValidMoves(Board, {Tetromino, Rotation, Pos}) ->

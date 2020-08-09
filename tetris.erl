@@ -1,7 +1,7 @@
 -module(tetris).
 -import(tetrominoes,[fetchTetromino/2]).
 -import(ai, [aiCoreLoop/2]).
--export([start/0, gameLoop/6, board/2, output/1, moveQueue/1, descendMoveGenerator/1, printFunction/2, validTetrominoPos/3, applyFuncToBoard/3, writeTetrominoToBoard/2]).
+-export([start/0, gameLoop/6, board/2, output/1, moveQueue/1, descendMoveGenerator/1, printFunction/2, validTetrominoPos/3, applyFuncToBoard/3, updateBoard/2]).
 
 -define(WIDTH, 10).
 -define(HEIGHT, 15).
@@ -9,6 +9,12 @@
 -define(DESCENDPERIOD, 250).
 -define(TETROSTARTPOS, {4,1}).
 
+emptyRow() ->
+    [160,160,160,160,160,160,160,160,160,160].
+
+fullRow() ->
+    [?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,
+     ?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK].
 %=============================================================================
 %                                 START
 %=============================================================================
@@ -16,7 +22,7 @@
 % Configures all the required processes to run the core tetris game loop.
 %
 start() ->
-    Board = lists:duplicate(?HEIGHT,[160,160,160,160,160,160,160,160,160,160]),
+    Board = lists:duplicate(?HEIGHT,emptyRow()),
     MoveQueuePID         = spawn(?MODULE, moveQueue, [{0,0,0}]),
     DescendMoveGenerator = spawn(?MODULE, descendMoveGenerator, [MoveQueuePID]),
     BoardPID             = spawn(?MODULE, board, [Board, placeholder]),
@@ -218,14 +224,26 @@ printFunction([BoardCell | BoardTail], [TetX | TetTail], PrintX) ->
 %
 % 
 %
-%writeTetrominoToBoard(restOfBoardRow, BoardRow) ->
-%    BoardRow;
-%
-%writeTetrominoToBoard(boardCell, BoardCell) ->
-%    BoardCell;
-%
-%writeTetrominoToBoard(tetroCell, TetroBlock) ->
-%    TetroBlock.
+
+updateBoard(Board, {Tetromino, {PosX, PosY}}) ->
+    YCoord = 1,
+    ClearRowCount = 0,
+    NewBoardInfo = updateBoard(Board, {Tetromino, {PosX, PosY}}, YCoord, ClearRowCount),
+    lists:duplicate(lists:last(NewBoardInfo),emptyRow()) ++ lists:droplast(NewBoardInfo).
+
+updateBoard([], _, _, ClearRowCount) ->
+    [ClearRowCount];
+
+updateBoard([BoardRow|BoardTail], {Tetromino, {PosX, PosY}}, YCoord, ClearRowCount) ->
+    NewBoardRow = writeTetrominoToBoard(BoardRow, [PosX + TetX || [TetX, TetY] <- Tetromino, PosY + TetY == YCoord]),
+    if 
+        NewBoardRow == [?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,
+                     ?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK] ->
+            updateBoard(BoardTail, {Tetromino, {PosX, PosY}}, YCoord + 1, ClearRowCount + 1);
+        true ->
+            [NewBoardRow] ++ updateBoard(BoardTail, {Tetromino, {PosX, PosY}}, YCoord + 1, ClearRowCount)
+    end.
+
 writeTetrominoToBoard(BoardRow, []) ->
     BoardRow;
 writeTetrominoToBoard(BoardRow, TetrominoRowPos) ->
@@ -262,7 +280,7 @@ updateGameState(Board, {Tetromino, {PosX, PosY}}, {MoveX, MoveY}) ->
             if 
                 MoveY == 1 ->
                     {tetrominoLanded, 
-                     applyFuncToBoard(Board, fun writeTetrominoToBoard/2, {Tetromino, {PosX, PosY}}), 
+                     updateBoard(Board, {Tetromino, {PosX, PosY}}), 
                      {PosX, PosY}};
                 true ->
                     {tetrominoDescending, Board, {PosX, PosY}}
