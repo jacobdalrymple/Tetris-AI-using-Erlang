@@ -229,7 +229,8 @@ updateBoard(Board, {Tetromino, {PosX, PosY}}) ->
     YCoord = 1,
     ClearRowCount = 0,
     NewBoardInfo = updateBoard(Board, {Tetromino, {PosX, PosY}}, YCoord, ClearRowCount),
-    lists:duplicate(lists:last(NewBoardInfo),emptyRow()) ++ lists:droplast(NewBoardInfo).
+    RowsCleared = lists:last(NewBoardInfo),
+    {RowsCleared, lists:duplicate(RowsCleared,emptyRow()) ++ lists:droplast(NewBoardInfo)}.
 
 updateBoard([], _, _, ClearRowCount) ->
     [ClearRowCount];
@@ -279,9 +280,8 @@ updateGameState(Board, {Tetromino, {PosX, PosY}}, {MoveX, MoveY}) ->
         false ->
             if 
                 MoveY == 1 ->
-                    {tetrominoLanded, 
-                     updateBoard(Board, {Tetromino, {PosX, PosY}}), 
-                     {PosX, PosY}};
+                    {RowsCleared, NewBoard} = updateBoard(Board, {Tetromino, {PosX, PosY}}),
+                    {tetrominoLanded, NewBoard, {PosX, PosY}};
                 true ->
                     {tetrominoDescending, Board, {PosX, PosY}}
             end
