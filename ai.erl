@@ -107,13 +107,13 @@ calculateBestMove(Board, TetrominoInfo) ->
 aiCoreLoop(BoardPID, MoveQueuePID) ->
     BoardPID ! {getBoard, self()},
     receive
-        {sendBoard, Board, placeholder} ->
+        {sendBoard, Board, placeholder, _, _} ->
             timer:send_after(?AIWAIT, tick),
             receive
                 tick ->
                     aiCoreLoop(BoardPID, MoveQueuePID)
             end;
-        {sendBoard, Board, TetrominoInfo} ->
+        {sendBoard, Board, TetrominoInfo, FutureTetrominoes, GameAttributes} ->
             Move = calculateBestMove(Board, TetrominoInfo),
             MoveQueuePID ! {move, Move},
             timer:send_after(?AIWAIT, tick),
