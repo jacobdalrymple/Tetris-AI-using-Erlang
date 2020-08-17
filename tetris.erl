@@ -11,12 +11,20 @@
 -define(STARTLEVEL, 0).
 -define(CLEAREDROWSFORNEXTLEVEL, 10).
 
+
+%=============================================================================
+%                              MISC FUNCS
+%=============================================================================
+%
+% Some misc func to aid in code clarity
+%
 emptyRow() ->
     [160,160,160,160,160,160,160,160,160,160].
 
 fullRow() ->
     [?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,
      ?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK,?TETROBLOCK].
+
 %=============================================================================
 %                                 START
 %=============================================================================
@@ -46,7 +54,8 @@ start() ->
 %                        DESCEND MOVE GENERATOR
 %=============================================================================
 %
-% Sends the descend move to the move queue every ?DESCENDPERIOD mil-seconds,
+% Sends the descend move to the move queue at an interval dependant on the current
+% level of the tetris game.
 % Basically determines how quickly the tetrominoes will descend.
 %
 descendMoveGenerator(MoveQueuePID, BoardPID) ->
@@ -66,8 +75,10 @@ descendMoveGenerator(MoveQueuePID, BoardPID) ->
 %=============================================================================
 %
 % Stores all the moves either sent by the AI or the descend move generator.
-% Ready to send the accumulated moves to the core game loop when requested.
-% {move in x dir, move in y dir, num of times to rotate 90 deg clockwise}
+% Sends the accumulated moves to the core game loop when requested.
+%
+% A move is represented as a 3-turple below : 
+% {move in x dir, move in y dir, tetromino rotation}
 %
 moveQueue({0, 0, 0}) ->
     receive
@@ -100,12 +111,9 @@ addMoves({X1, Y1, R1}, {X2, Y2, R2}) ->
 %                       GEN RANDOM TETROMINO
 %=============================================================================
 %
-% Generates a random tetromino.
-%
-
-%
-%
-% change to list !!!
+% Generates a random tetromino, either returns a random valid tetromino or
+% an atom expressing that the game over state has been reached (no valid tetromino
+% can be generated). 
 %
 genTetromino(Board) ->
     Tetrominoes = [i,j,l,o,s,t,z],
@@ -124,7 +132,8 @@ genTetromino(Board) ->
 %=============================================================================
 %
 % Function returns contents of board cell in relation to the given coords.
-% Returns the value of the tetromino cell value if coords are out of range/invalid.
+% Returns the value representing the tetromino cell value if coords are out 
+% of range/invalid.
 %
 lookUpBoardPos(X, Y, Board) ->
     if
@@ -140,7 +149,7 @@ lookUpBoardPos(X, Y, Board) ->
 %                              VALID TETROMINO POS
 %=============================================================================
 %
-% Function when given tetromino, its position and the board will return true/false
+% Function when given tetromino, its position and the board; will return true/false
 % atom on weather the tetromino and position pair is a valid state for the board.
 %
 validTetrominoPos([], _, _) ->
@@ -155,11 +164,10 @@ validTetrominoPos([[TetX, TetY] | TetTail], Board, {PosX, PosY}) ->
     end.
 
 %=============================================================================
-%                         APPLY FUNC TO BOARD/ROW
+%                         APPLY FUNC TO BOARD
 %=============================================================================
 %
-% These pair of functions apply a function accross the board and current tetromino
-% cells. For example printing the board or writing a tetromino to the board.
+% This function allows for a function to be applied to each row of the board.
 %
 applyFuncToBoard(Board, Func, {Tetromino, {PosX, PosY}}) ->
     YCoord = 1,
@@ -178,6 +186,7 @@ applyFuncToBoard([BoardRow|BoardTail], Func, {Tetromino, {PosX, PosY}}, YCoord) 
 %
 % Designed to be used with the applyFuncToBoard function, this function is used
 % to print the board to the console.
+%
 
 printFunction(BoardRow, [])->
     io:fwrite("~s", [[BoardRow]]),
@@ -201,10 +210,12 @@ printFunction([BoardCell | BoardTail], [TetX | TetTail], PrintX) ->
     end.
 
 %=============================================================================
-%                       WRITE TETROMINO TO BOARD
+%                  UPDATE BOARD/ WRITE TETROMINO TO BOARD
 %=============================================================================
 %
-% 
+% Following updateBoard() and writeTetrominoToBoard() funcs write a tetromino
+% to the board and clears completed rows on the board.
+% Returns the number of rows cleared and the updated board.
 %
 
 updateBoard(Board, {Tetromino, {PosX, PosY}}) ->
@@ -244,10 +255,22 @@ writeTetrominoToBoard([BoardCell | BoardTail], [TetX | TetTail], PrintX) ->
             [BoardCell] ++ writeTetrominoToBoard(BoardTail, [TetX | TetTail], PrintX + 1)
     end.
 
-calculateNewGameAttributes(GameAttributes, 0) ->
+%=============================================================================
+%                         UPDATE GAME ATTRIBUTES
+%=============================================================================
+%
+% Game Attributes is turple of length 3 containing the following infomation :
+% {Current level of the game, 
+%  Current Score, 
+%  Rows cleared since the last level was achieved}
+%
+% This updates the Game attributes using the rows cleared this turn.
+%
+
+updateGameAttributes(GameAttributes, 0) ->
     GameAttributes;
 
-calculateNewGameAttributes({?STARTLEVEL, Score, RowsClearedThisLevel}, RowsClearedThisTurn) ->
+updateGameAttributes({?STARTLEVEL, Score, RowsClearedThisLevel}, RowsClearedThisTurn) ->
     RowsClearedForNextLevel = min(?STARTLEVEL*10 - 10, max(100, ?STARTLEVEL*10 - 50)),
     RowsClearedTotal = RowsClearedThisLevel + RowsClearedThisTurn,
     UpdatedScore = Score + (?STARTLEVEL + 1) * tetrominoes:getScore(RowsClearedThisTurn),
@@ -260,7 +283,7 @@ calculateNewGameAttributes({?STARTLEVEL, Score, RowsClearedThisLevel}, RowsClear
             {?STARTLEVEL, UpdatedScore, RowsClearedTotal}
     end;
 
-calculateNewGameAttributes({Level, Score, RowsClearedThisLevel}, RowsClearedThisTurn) ->
+updateGameAttributes({Level, Score, RowsClearedThisLevel}, RowsClearedThisTurn) ->
     UpdatedScore = Score + (?STARTLEVEL + 1) * tetrominoes:getScore(RowsClearedThisTurn),
     RowsClearedTotal = RowsClearedThisLevel + RowsClearedThisTurn,
     if
@@ -279,8 +302,9 @@ calculateNewGameAttributes({Level, Score, RowsClearedThisLevel}, RowsClearedThis
 %                          UPDATE GAME STATE
 %=============================================================================
 %
-% 
-% no move to validate or move
+% Updates the games data structures, i.e. the board and game attributes,
+% using a given move.
+%
 updateGameState(Board, {_, Pos}, {0,0}, GameAttributes) ->
     {tetrominoDescending, Board, Pos, GameAttributes};
 
@@ -293,8 +317,7 @@ updateGameState(Board, {Tetromino, {PosX, PosY}}, {MoveX, MoveY}, GameAttributes
             if 
                 MoveY == 1 ->
                     {RowsCleared, NewBoard} = updateBoard(Board, {Tetromino, {PosX, PosY}}),
-                    io:format("ROWS CLEARED : ~p~n", [RowsCleared]),
-                    UpdatedGameAttributes = calculateNewGameAttributes(GameAttributes, RowsCleared),
+                    UpdatedGameAttributes = updateGameAttributes(GameAttributes, RowsCleared),
                     {tetrominoLanded, NewBoard, {PosX, PosY}, UpdatedGameAttributes};
                 true ->
                     {tetrominoDescending, Board, {PosX, PosY}, GameAttributes}
@@ -305,8 +328,8 @@ updateGameState(Board, {Tetromino, {PosX, PosY}}, {MoveX, MoveY}, GameAttributes
 %                           GET ROTATE VALUE
 %=============================================================================
 %
-% Calculate new rotation value using existin rotation value and the rotation from
-% the move.
+% Returns the new rotation if it is non-zero, else just returns the existing
+% rotation.
 %
 getNewRotation(Rotation, 0) ->
     Rotation;
@@ -317,7 +340,8 @@ getNewRotation(_, NewRotation) ->
 %                              GAME LOOP
 %=============================================================================
 %
-% 
+% The main loop of the tetris game, deals with fetching moves, generating new 
+% tetrominoes and updating the game state.
 %
 gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, GameAttributes, BoardPID, MoveQueuePID, KillPID) ->
     %fetch moves bro
@@ -347,7 +371,8 @@ gameLoop(tetrominoLanded, Board, _, GameAttributes, BoardPID, MoveQueuePID, Kill
 %                               BOARD
 %=============================================================================
 %
-% 
+% Process representing the current state of the board. Infomation can be
+% queried from it or it can be updated with new values.
 %
 board(Board, TetrominoInfo, FutureTetrominoes, GameAttributes) ->
     receive
@@ -367,7 +392,7 @@ board(Board, TetrominoInfo, FutureTetrominoes, GameAttributes) ->
 %                               OUTPUT
 %=============================================================================
 %
-%
+% Outputs the current state of the game to the console at a fix time interval
 %
 output(BoardPID) ->
     timer:send_after(?DESCENDPERIOD, display),
