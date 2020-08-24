@@ -1,7 +1,7 @@
 -module(tetris).
 -import(tetrominoes,[fetchTetromino/2]).
 -import(ai, [aiCoreLoop/2]).
--export([start/0, gameLoop/7, board/4, output/1, moveQueue/1, descendMoveGenerator/2, printFunction/2, validTetrominoPos/3, applyFuncToBoard/3, updateBoard/2]).
+-export([start/0, gameLoop/7, board/3, output/1, moveQueue/1, descendMoveGenerator/2, printFunction/2, validTetrominoPos/3, applyFuncToBoard/3, updateBoard/2]).
 
 -define(WIDTH, 10).
 -define(HEIGHT, 15).
@@ -34,9 +34,9 @@ fullRow() ->
 start() ->
     Board = lists:duplicate(?HEIGHT,emptyRow()),
     MoveQueuePID         = spawn(?MODULE, moveQueue, [{0,0,0}]),
-    BoardPID             = spawn(?MODULE, board, [Board, placeholder, [], {?STARTLEVEL,0,0}]),
+    BoardPID             = spawn(?MODULE, board, [Board, placeholder, {?STARTLEVEL,0,0,[]}]),
     DescendMoveGenerator = spawn(?MODULE, descendMoveGenerator, [MoveQueuePID, BoardPID]),
-    GameLoop             = spawn(?MODULE, gameLoop, [tetrominoLanded, Board, placeholder, {?STARTLEVEL,0,0}, BoardPID, MoveQueuePID, self()]),
+    GameLoop             = spawn(?MODULE, gameLoop, [tetrominoLanded, Board, placeholder, {?STARTLEVEL,0,0,[]}, BoardPID, MoveQueuePID, self()]),
     AIPID                = spawn(ai,      aiCoreLoop, [BoardPID, MoveQueuePID]),
     Output               = spawn(?MODULE, output, [BoardPID]),
     receive
@@ -61,7 +61,7 @@ start() ->
 descendMoveGenerator(MoveQueuePID, BoardPID) ->
     BoardPID ! {getLevel, self()},
     receive
-        {sendLevel, {Level,_,_}} ->
+        {sendLevel, {Level,_,_,_}} ->
             timer:send_after(tetrominoes:getSpeed(Level), tick),
             receive
                 tick ->
@@ -115,17 +115,33 @@ addMoves({X1, Y1, R1}, {X2, Y2, R2}) ->
 % an atom expressing that the game over state has been reached (no valid tetromino
 % can be generated). 
 %
-genTetromino(Board) ->
+genTetromino(Board, []) ->
     Tetrominoes = [i,j,l,o,s,t,z],
     RandIndex = rand:uniform(length(Tetrominoes)),
-    RandRotation = rand:uniform(tetrominoes:numOfUniqueRotations(lists:nth(RandIndex, Tetrominoes))),
-    Tetromino = lists:nth(RandIndex, Tetrominoes),
-    case validTetrominoPos(tetrominoes:fetchTetromino(Tetromino, RandRotation), Board, ?TETROSTARTPOS) of
+    genTetromino(Board, [lists:nth(RandIndex, Tetrominoes)]);
+
+genTetromino(Board, [NewTetromino | FutureTetrominoes]) ->
+    Tetrominoes = [i,j,l,o,s,t,z],
+    RandRotation = rand:uniform(tetrominoes:numOfUniqueRotations(NewTetromino)),
+    case validTetrominoPos(tetrominoes:fetchTetromino(NewTetromino, RandRotation), Board, ?TETROSTARTPOS) of
         true ->
-            {lists:nth(RandIndex, Tetrominoes), RandRotation, ?TETROSTARTPOS};
+            RandIndex = rand:uniform(length(Tetrominoes)),
+            {{NewTetromino, RandRotation, ?TETROSTARTPOS}, FutureTetrominoes ++ [lists:nth(RandIndex, Tetrominoes)]};
         false ->
             gameOver
     end.
+    
+    %Tetrominoes = [i,j,l,o,s,t,z],
+    %RandIndex = rand:uniform(length(Tetrominoes)),
+    %RandRotation = rand:uniform(tetrominoes:numOfUniqueRotations(lists:nth(RandIndex, Tetrominoes))),
+    %Tetromino = lists:nth(RandIndex, Tetrominoes),
+    %%{Tetromino, RandRotation, ?TETROSTARTPOS}.
+    %case validTetrominoPos(tetrominoes:fetchTetromino(Tetromino, RandRotation), Board, ?TETROSTARTPOS) of
+    %    true ->
+    %        {Tetromino, RandRotation, ?TETROSTARTPOS};
+    %    false ->
+    %        gameOver
+    %end.
 
 %=============================================================================
 %                          LOOK UP BOARD POS
@@ -270,29 +286,29 @@ writeTetrominoToBoard([BoardCell | BoardTail], [TetX | TetTail], PrintX) ->
 updateGameAttributes(GameAttributes, 0) ->
     GameAttributes;
 
-updateGameAttributes({?STARTLEVEL, Score, RowsClearedThisLevel}, RowsClearedThisTurn) ->
+updateGameAttributes({?STARTLEVEL, Score, RowsClearedThisLevel, FutureTetrominoes}, RowsClearedThisTurn) ->
     RowsClearedForNextLevel = min(?STARTLEVEL*10 - 10, max(100, ?STARTLEVEL*10 - 50)),
     RowsClearedTotal = RowsClearedThisLevel + RowsClearedThisTurn,
     UpdatedScore = Score + (?STARTLEVEL + 1) * tetrominoes:getScore(RowsClearedThisTurn),
     if
         RowsClearedForNextLevel == RowsClearedTotal ->
-            {?STARTLEVEL + 1, UpdatedScore, 0};
+            {?STARTLEVEL + 1, UpdatedScore, 0, FutureTetrominoes};
         RowsClearedForNextLevel < RowsClearedTotal ->
-            {?STARTLEVEL + 1, UpdatedScore, RowsClearedTotal - RowsClearedForNextLevel};
+            {?STARTLEVEL + 1, UpdatedScore, RowsClearedTotal - RowsClearedForNextLevel, FutureTetrominoes};
         true ->
-            {?STARTLEVEL, UpdatedScore, RowsClearedTotal}
+            {?STARTLEVEL, UpdatedScore, RowsClearedTotal, FutureTetrominoes}
     end;
 
-updateGameAttributes({Level, Score, RowsClearedThisLevel}, RowsClearedThisTurn) ->
+updateGameAttributes({Level, Score, RowsClearedThisLevel, FutureTetrominoes}, RowsClearedThisTurn) ->
     UpdatedScore = Score + (?STARTLEVEL + 1) * tetrominoes:getScore(RowsClearedThisTurn),
     RowsClearedTotal = RowsClearedThisLevel + RowsClearedThisTurn,
     if
         ?CLEAREDROWSFORNEXTLEVEL == RowsClearedTotal ->
-            {Level + 1, UpdatedScore, 0};
+            {Level + 1, UpdatedScore, 0, FutureTetrominoes};
         ?CLEAREDROWSFORNEXTLEVEL < RowsClearedTotal ->
-            {Level, UpdatedScore, RowsClearedTotal - ?CLEAREDROWSFORNEXTLEVEL};
+            {Level, UpdatedScore, RowsClearedTotal - ?CLEAREDROWSFORNEXTLEVEL, FutureTetrominoes};
         true ->
-            {Level, UpdatedScore, RowsClearedTotal}
+            {Level, UpdatedScore, RowsClearedTotal, FutureTetrominoes}
     end.
 
 
@@ -358,13 +374,15 @@ gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, GameAttributes,
     end;
 
 gameLoop(tetrominoLanded, Board, _, GameAttributes, BoardPID, MoveQueuePID, KillPID) ->
-    case genTetromino(Board) of
+    {Level, Score, RowsCleared, FutureTetrominoes} = GameAttributes,
+    case genTetromino(Board, FutureTetrominoes) of
         gameOver ->
             io:format("GAME OVER :( ~n",[]),
             KillPID ! gameOver;
-        {Tetromino, Rotation, Pos} ->
-            BoardPID ! {updateBoard, Board, {Tetromino, Rotation, Pos}, GameAttributes},
-            gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, GameAttributes, BoardPID, MoveQueuePID, KillPID)
+        {{Tetromino, Rotation, Pos}, UpdatedFutureTetrominoes} ->
+            UpdatedGameAttributes = {Level, Score, RowsCleared, UpdatedFutureTetrominoes},
+            BoardPID ! {updateBoard, Board, {Tetromino, Rotation, Pos}, UpdatedGameAttributes},
+            gameLoop(tetrominoDescending, Board, {Tetromino, Rotation, Pos}, UpdatedGameAttributes, BoardPID, MoveQueuePID, KillPID)
     end.
 
 %=============================================================================
@@ -374,18 +392,18 @@ gameLoop(tetrominoLanded, Board, _, GameAttributes, BoardPID, MoveQueuePID, Kill
 % Process representing the current state of the board. Infomation can be
 % queried from it or it can be updated with new values.
 %
-board(Board, TetrominoInfo, FutureTetrominoes, GameAttributes) ->
+board(Board, TetrominoInfo, GameAttributes) ->
     receive
         {updateBoard, UpdatedBoard, UpdatedTetrominoInfo, UpdatedGameAttributes} ->
-            board(UpdatedBoard, UpdatedTetrominoInfo, FutureTetrominoes, UpdatedGameAttributes);
+            board(UpdatedBoard, UpdatedTetrominoInfo, UpdatedGameAttributes);
 
         {getBoard, ReturnPID} ->
-            ReturnPID ! {sendBoard, Board, TetrominoInfo, FutureTetrominoes, GameAttributes},
-            board(Board, TetrominoInfo, FutureTetrominoes, GameAttributes);
+            ReturnPID ! {sendBoard, Board, TetrominoInfo, GameAttributes},
+            board(Board, TetrominoInfo, GameAttributes);
 
         {getLevel, ReturnPID} ->
             ReturnPID ! {sendLevel, GameAttributes},
-            board(Board, TetrominoInfo, FutureTetrominoes, GameAttributes)
+            board(Board, TetrominoInfo, GameAttributes)
     end.
 
 %=============================================================================
@@ -400,11 +418,19 @@ output(BoardPID) ->
         display ->
             BoardPID ! {getBoard, self()},
             receive
-                {sendBoard, Board, {Tetromino, Rotation, Pos}, FutureTetrominoes, {Level, Score, _}} ->
+                {sendBoard, Board, {Tetromino, Rotation, Pos}, {Level, Score, _, [FutureTetromino | _]}} ->
                     _ = applyFuncToBoard(Board, fun printFunction/2, {tetrominoes:fetchTetromino(Tetromino, Rotation), Pos}),
                     io:fwrite("~s~n", [[$-,$-,$-,$-,$-,$-,$-,$-,$-,$-,$|]]),
-                    io:format("LEVEL : ~p", [Level]),
-                    io:format("        SCORE : ~p~n", [Score]),
+                    io:format("LEVEL         : ~p", [Level]),
+                    io:format("        SCORE      : ~p~n", [Score]),
+                    io:format("CURRENT PIECE : ~p", [Tetromino]),
+                    io:format("        NEXT PIECE : ~p~n", [FutureTetromino]),
+                    output(BoardPID);
+                {sendBoard, Board, {Tetromino, Rotation, Pos}, {Level, Score, _,[]}} ->
+                    _ = applyFuncToBoard(Board, fun printFunction/2, {tetrominoes:fetchTetromino(Tetromino, Rotation), Pos}),
+                    io:fwrite("~s~n", [[$-,$-,$-,$-,$-,$-,$-,$-,$-,$-,$|]]),
+                    io:format("LEVEL         : ~p", [Level]),
+                    io:format("        SCORE      : ~p~n", [Score]),
                     output(BoardPID)
             end
     end.
