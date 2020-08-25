@@ -7,10 +7,10 @@
 %defines how long the ai will wait after submitting move to retrieve new game state.
 -define(AIWAIT, 10).
 -define(TETROBLOCK, $B).
--define(BUMPSCOREWEIGHT, 1).
--define(HEIGHTSCOREWEIGHT, 1).
--define(HOLESCOREWEIGHT, 10).
--define(CLEARROWSCOREWEIGHT, -5).
+-define(BUMPSCOREWEIGHT, 3).
+-define(HEIGHTSCOREWEIGHT, -1).
+-define(HOLESCOREWEIGHT, 50).
+-define(CLEARROWSCOREWEIGHT, -10).
 
 % ColInfo = {Height of cell's column, current contentes of cell}
 updateRowTracker([], [], _) ->
@@ -30,9 +30,9 @@ getBoardCost([BoardRow | BoardT]) ->
     getBoardCost([BoardRow | BoardT], [{0, empty} || _ <- BoardRow], 1).
 
 getBumpAndHeightCost([{H, _}]) ->
-    ?HEIGHTSCOREWEIGHT * 1/math:pow(2, H);
+    ?HEIGHTSCOREWEIGHT *  H;
 getBumpAndHeightCost([{H1, _} | [{H2, A} | T]]) ->
-   ?HEIGHTSCOREWEIGHT * (1/math:pow(2, H1)) + ?BUMPSCOREWEIGHT * abs(H1 - H2) + getBumpAndHeightCost([{H2, A} | T]).
+   ?HEIGHTSCOREWEIGHT * H1 + ?BUMPSCOREWEIGHT * (abs(H1 - H2)) + getBumpAndHeightCost([{H2, A} | T]).
 
 
 %here the heights are used in the cost function
@@ -75,8 +75,8 @@ genValidMoves(Board, Tetromino, CurrPos, PotentialXPos) ->
     %io:format("POTENTIAL X POS : ~p~n", [PotentialXPos]),
     genValidMoves(Board, Tetromino, CurrPos, PotentialXPos, 1, []).
 
-genValidMoves(_, _, _, [], _, _) ->
-    [];
+genValidMoves(_, _, _, [], _, CurrMoveList) ->
+    CurrMoveList;
 
 genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, [PotentialXPos | PotentialXPosTail], PotentialYPos, CurrMoveList) ->
     case tetris:validTetrominoPos(Tetromino, Board, {PotentialXPos, PotentialYPos}) of
@@ -89,10 +89,31 @@ genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, [PotentialXPos | Potential
                 PotentialYPos < CurrYPos ->
                     genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, PotentialXPosTail, 1, CurrMoveList);
                 true ->
-                    [{PotentialXPos - CurrXPos, PotentialYPos - 1 - CurrYPos}] 
-                        ++ genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, PotentialXPosTail, 1, CurrMoveList)
+                    UpdatedMoveList = genTetroSlideMoves({PotentialXPos - CurrXPos, PotentialYPos - 1 - CurrYPos}, CurrMoveList, Board, Tetromino, {CurrXPos, CurrYPos}),
+                    genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, PotentialXPosTail, 1, UpdatedMoveList)
+                    %genValidMoves(Board, Tetromino, {CurrXPos, CurrYPos}, PotentialXPosTail, 1, CurrMoveList ++ [{PotentialXPos - CurrXPos, PotentialYPos - 1 - CurrYPos}])
             end
     end.
+
+genTetroSlideMoves({XMove, YMove}, CurrMoveList, Board, Tetromino, Pos) ->
+    addToMoveList([{XMove-1, YMove}, {XMove, YMove}, {XMove+1, YMove}], CurrMoveList, Board, Tetromino, Pos).
+
+addToMoveList([], CurrMoveList, _, _,_) ->
+    CurrMoveList;
+
+addToMoveList([{XMove, YMove} | MoveListTail], CurrMoveList, Board, Tetromino, {XPos, YPos}) ->
+    case lists:member({XMove, YMove}, CurrMoveList) of
+        true ->
+            addToMoveList(MoveListTail, CurrMoveList, Board, Tetromino, {XPos, YPos});
+        false ->
+            case tetris:validTetrominoPos(Tetromino, Board, {XMove + XPos, YMove + YPos}) of
+                true ->
+                    addToMoveList(MoveListTail, CurrMoveList ++ [{XMove, YMove}], Board, Tetromino, {XPos, YPos});
+                false ->
+                    addToMoveList(MoveListTail, CurrMoveList, Board, Tetromino, {XPos, YPos})
+            end
+    end.
+
 
 selectBestMove([{Cost, Move} | MoveListT]) ->
     selectBestMove([{Cost, Move} | MoveListT], [{10000000, Move}]).
@@ -110,28 +131,28 @@ selectBestMove([{Cost, Move} | MoveListT], [{BestCost, BestMove} | BestMoveListT
 
 
 %need to stop tetromino going higher!!
-calculateBestMove(Board, TetrominoInfo) ->
-    MoveList = fetchValidMoves(Board, TetrominoInfo),
+calculateBestMove(Board, {CurrTetrominoInfo, _}) ->
+    MoveList = fetchValidMoves(Board, CurrTetrominoInfo),
     %io:format("MOVE LIST : ~p~n", [MoveList]),
     %io:format("SENT MOVE : ~p~n", [selectBestMove(MoveList)]),
     selectBestMove(MoveList).
     
 
-aiCoreLoop(BoardPID, MoveQueuePID) ->
-    BoardPID ! {getBoard, self()},
+aiCoreLoop(GameStatePID, MoveQueuePID) ->
+    GameStatePID ! {fetchGameState, self()},
     receive
-        {sendBoard, Board, placeholder, _} ->
+        {sendGameState, {Board, {_,[]}, _}} ->
             timer:send_after(?AIWAIT, tick),
             receive
                 tick ->
-                    aiCoreLoop(BoardPID, MoveQueuePID)
+                    aiCoreLoop(GameStatePID, MoveQueuePID)
             end;
-        {sendBoard, Board, TetrominoInfo, GameAttributes} ->
+        {sendGameState, {Board, TetrominoInfo, GameMetrics}} ->
             Move = calculateBestMove(Board, TetrominoInfo),
             MoveQueuePID ! {move, Move},
             timer:send_after(?AIWAIT, tick),
             receive
                 tick ->
-                    aiCoreLoop(BoardPID, MoveQueuePID)
+                    aiCoreLoop(GameStatePID, MoveQueuePID)
             end
     end.
