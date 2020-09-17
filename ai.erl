@@ -7,7 +7,7 @@
 %defines how long the ai will wait after submitting move to retrieve new game state.
 -define(AIWAIT, 10).
 -define(TETROBLOCK, $B).
--define(BUMPSCOREWEIGHT, 3).
+-define(BUMPSCOREWEIGHT, 6).
 -define(HEIGHTSCOREWEIGHT, -1).
 -define(HOLESCOREWEIGHT, 50).
 -define(CLEARROWSCOREWEIGHT, -10).
@@ -136,7 +136,8 @@ calculateBestMove(Board, {CurrTetrominoInfo, _}) ->
     %io:format("MOVE LIST : ~p~n", [MoveList]),
     %io:format("SENT MOVE : ~p~n", [selectBestMove(MoveList)]),
     selectBestMove(MoveList).
-    
+
+%AI MOVING PEICE UPWARDS???
 
 aiCoreLoop(GameStatePID, MoveQueuePID) ->
     GameStatePID ! {fetchGameState, self()},
